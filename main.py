@@ -5,6 +5,8 @@ from flask_migrate import Migrate
 from sqlalchemy.orm import DeclarativeBase
 import os
 from dotenv import load_dotenv
+import secrets
+from datetime import datetime
 
 # PATH VARIABLES
 BASE_PATH = os.path.dirname(os.path.abspath(__name__))
@@ -44,12 +46,53 @@ class URL(db.Model):
     short_url = db.Column(db.String(50), nullable=False, unique= True)
     original_url = db.Column(db.String(200), nullable=False)
     date_created = db.Column(db.DateTime, nullable = False)
-    user = db.Column(db.String(50), db.ForeignKey("user.id"), nullable = False)
+    user = db.Column(db.String(50), db.ForeignKey("user.id"), nullable = True)
 
 class Clicks(db.Model):
     id = db.Column(db.Integer, primary_key = True)
     url = db.Column(db.Integer, db.ForeignKey("url.id"))
     last_click = db.Column(db.DateTime, nullable = False)
+
+# FUNCTIONS
+def generate_short_url():
+    short_url = secrets.token_urlsafe(8)
+    return short_url
+
+def store_url(short_url, original_url):
+    data = URL(
+        short_url= short_url,
+        original_url = original_url,
+        date_created = datetime.now()
+    )
+    db.session.add(data)
+    db.session.commit()
+    return "URL Link created in database!"
+
+def register_click(url):
+    click = Clicks(
+        url=url,
+        last_click=datetime.now()
+    )
+    db.session.add(click)
+    db.session.commit()
+    return "Click was registered!"
+
+# ROUTES
+@app.route('/shorten', methods=['GET','POST'])
+def shorten_link():
+    if request.method == 'POST':
+        original_url = request.form.get('url','').strip()
+        short_url = generate_short_url()
+        store_url(short_url, original_url)
+        return f"A link was shortened as {short_url}!"
+    return render_template('index.html')
+
+@app.route('/<short_code>')
+def look_up(short_code):
+    data = URL.query.filter_by(short_url=short_code).first_or_404()
+    original_url = data.original_url
+    register_click(data.id)
+    return redirect(original_url)
 
 # APP START
 if __name__ == '__main__':
